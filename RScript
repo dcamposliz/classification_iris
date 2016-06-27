@@ -1,0 +1,229 @@
+# Data Mining Techniques in R.
+# Compiled by: Kim Specht and Raul Eulogio
+
+# Objective: We are using data mining techniques on the iris data set to help out current project
+# members to grasp basic concepts in R. We used techniques taught at UCSB's PSTAT course 131, although
+# not exhaustive, we wanted to present a simple to follow guideline for certain data mining techniques in R!!!
+
+# First we load the necessary packages for our analysis
+install.packages("data.table", repos="http://cran.rstudio.com/")
+# ", repos="http://cran.rstudio.com/" part only added since I am running R under ubuntu (- Raul)
+require(data.table)
+require(class)
+require(ggplot2)
+require(MASS)
+install.packages("gridExtra" , repos="http://cran.rstudio.com/")
+require(gridExtra)
+require(scales)
+install.packages("tree", repos="http://cran.rstudio.com/")
+require(tree)
+install.packages("GGally", repos="http://cran.rstudio.com/")
+require(GGally)
+require(RGraphics)
+require(grid)
+install.packages("ROCR", repos="http://cran.rstudio.com/")
+require(ROCR)
+install.packages("scatterplot3d") # Install
+library("scatterplot3d")
+
+
+
+attach(iris)
+data(iris) # We call up the data set
+head(iris) # Returns the first 6 observations of our data set
+summary(iris) #Summary statistics
+
+# Exploratory Data Analysis
+
+# Here we create a visual to see the relationship between the sepal width and sepal length. And also the petal length and petal width
+gg1<-ggplot(iris,aes(x=Sepal.Width,y=Sepal.Length, shape=Species, color=Species))+geom_point(size=2)
+gg2<-ggplot(iris,aes(x=Petal.Width,y=Petal.Length, shape=Species, color=Species))+geom_point(size=2)
+
+
+grid.arrange(gg1, gg2,nrow=1,ncol=2,  top = "Scatter plots")
+dev.off() # This function immediately removes all plots from the Rplot so it is advised to run the plot and this function separately!!!!
+
+write.csv(iris, file="iris.csv")
+
+# More exploratory graphs, Pairwise Plot Matrix
+ggpairs(iris,mapping=aes(color=Species),columns=1:4)
+dev.off()
+colors <- c("#999999", "#E69F00", "#56B4E9")
+colors <- colors[as.numeric(iris$Species)]
+scatterplot3d(iris[,1:3], pch = 16, color=colors)
+legend("bottom", legend = levels(iris$Species),
+       col =  c("#999999", "#E69F00", "#56B4E9"), 
+       pch = c(16, 17, 18), 
+       inset = -0.25, xpd = TRUE, horiz = TRUE)
+
+# Principal Component Analysis
+iris.dat <- data.table(iris[, 1:4]) #Here we subset the data so that it includes the first 4 variables
+# excluding our class variable ("Species")
+head(iris.dat)
+# Here we assign a variable, to the function that performs a principal component analysis
+# on the iris data set. We included scale to be true because by default it is FALSE to
+# be consistent with S, but the package and data mining class advise to set to TRUE.
+iris.pca <- prcomp(iris.dat, scale = TRUE)
+# The first principal component is the linear combination of the dependent variables that
+# has the max variance. Therefore this component accounts for the most variation of the data.
+# The second principal component is the linear combination of dependent variables that accounts
+# for the remaining variation, where the first and second component are orthogonal (the correlation
+# between the two components is 0)
+
+# We output the summary
+print("Summary of the PCA on iris data set")
+summary(iris.pca)
+# The summary outputs the standard deviation of the components (4 in our case). The proportion
+# of the variance that each component has, so you can see that PC 1 & 2 have the most variance.
+# And the cumulative proportion shows that the first two components account for around 96% of the variance.
+
+iris.pca$rotation # The output are the rotations of the four PC”s, we can interpret these values as the coefficients
+# Of the linear combinations created by each PC.
+
+biplot(iris.pca)
+
+require(ggfortify)
+
+autoplot(iris.pca, data = iris, colour = 'Species',
+         loadings = TRUE, loadings.colour = "red",
+         loadings.label = TRUE, loadings.label.size = 3)
+dev.off()
+
+
+# Biplot is a little tricky to understand but the data points are the projections on the first and second PC's
+# The length of the arrows represent the variance of the variables.
+# The angle of between the arrows represents correlation between variables.
+
+
+PVE <- iris.pca$sdev^2/sum(iris.pca$sdev^2)
+PVE[1:4] # Outputting the proportion of variance explained by each principal component. Notice that the sum of
+# of all four PC's is 1, since we created linear combinations that made it so that our variance is 1!!
+
+
+
+# Another method of visualizing the eigenvalues corresponding to the components is a scree plot.
+# The plot just visually shows the components that explain the most variance in the iris data set.
+screeplot(iris.pca, type = "lines", main = "PVE Scree Plot of Iris")
+screeplot(iris.pca)
+
+dev.off()
+
+# The next method we decided to use is K-nearest neighbor algorithm.
+set.seed(1)
+samp.size <- floor(nrow(iris) * .75) # Here we are creating the size for the index we are going to use
+# for our training set (75% of the observations)
+samp.size #Outputting the result
+set.seed(1)
+train.ind <- sample(seq_len(nrow(iris.dat)), size = samp.size) # Here we are creating an index of the
+# randomized row indices to be included in our training set
+train.ind # The output will give a better reference so just run this and see what it outputs to gain
+# a better understanding
+train <- iris[train.ind, ] # This matches the respective row index created to the actual row of the
+# iris data set.  
+head(train) # Output the first six observations and see what I mean (the row indices on this should
+# match those created by train.ind)
+train.set <- subset(train, select = -c(Species)) # We create the training set excluding our class variable (Species)
+head(train.set) # Output result should only have four variables not including Species
+test <- iris[-train.ind, ] # Same process as train except we're excluding the row indices created by
+# train.ind in order to create our test set (the rest of the 25% of the data set)
+head(test) # Output the results
+test.set <- subset(test, select = -c(Species)) # We create the test set where we exclude the class variable(Species!!!)
+head(test.set) # Output the results
+class <- train[, "Species"] # Here we create the class index which only has the class variable for
+# the original train data frame. IMPORTANT: this class has to be a vector/matrix.
+print("Here's the length of the class variable:")
+length(class)
+# Creating a data frame will give you an error code when running the knn function!!!!
+head(class) # Output the results
+knn.iris <- knn(train = train.set, test = test.set, cl = class, k = 9, prob = T)
+# I can't go into too much detail for the knn algorithm (better explained in person imo). But basically
+# we use our training set to run the algorithm, it uses the class vector as a reference
+# because those are the actual values its trying to predict. So
+# Once R runs that for us (YAY machines doing the dirty work), since we added "prob = T" we are also given
+# the probabilities calculated
+test.class <- test[, "Species"] # Here we create a class vector/matrix that includes the actual species
+# values for the test set. Will be used later!!!
+head(test.class) # Output the results
+
+require(caret)
+# Run k-NN:
+set.seed(400)
+ctrl <- trainControl(method="repeatedcv",repeats = 3)
+knn.K <- train(Species ~ ., data = train, method = "knn", trControl = ctrl, preProcess = c("center","scale"))
+knn.K
+
+# Prediction accuracy
+table(test.class, knn.iris) # Here we have the data frame which contains the actual values for the class variable(Species),
+# for our test set.
+
+# These are what the knn function predicted so we can see how the predicted values did compared to the actual values!!
+print("Thus we have the error rate as 0.0446 for our K-nearest neighbor algorithm!")
+
+
+# LDA Analysis on train set
+iris.lda <- lda(Species~., data = iris)
+iris.lda # The end for calculating LDA is we want linear combinations of the 4 variables that gives the best separation b/w Species.
+# The "Proportions of trace" will be explained here the rest will be explained below: "POT is the proportions of between-class
+# variance that is explained by successive discriminant functions." (Discriminant analysis with R, Emanuele Taufer)
+print("Classes stored in lda function (where called in iris.lda):")
+iris.lda$prior # Outputs the prior prob for each class variable.
+print("counts:")
+iris.lda$counts # Outputs the counts of each Species (150 in total!)
+print("means:")
+iris.lda$means # Outputs the group means
+print("scaling:")
+iris.lda$scaling # Outputs the coefficients for both linear combinations of the variables.
+print("singular values:")
+iris.lda$svd
+# Here we can use the singular values to calculate the between-group variance which is explained by both linear discriminants.
+# Thus the first linear discriminant 99% of the between-group variance!
+prop <- iris.lda$svd^2/sum(iris.lda$svd^2)
+prop
+lda.pred <- predict(iris.lda, iris)
+lda.pred$class # Vector containing the classifications
+lda.pred$posterior # This contains the posterior probs for each of the classes (of Species)
+lda.pred$x #This matrix contains the discriminant scores
+
+
+# Creating table of LDA scores for the entire data set which we will visualize after!!
+print("LDA scores:")
+lda.scores <- data.table("Species" = iris$Species, "LDA1" = lda.pred$x[,1],
+                         "LDA2" = lda.pred$x[,2])
+lda.scores
+# Plotting the scores of LDA
+gg1.lda <- ggplot(lda.scores, aes(LDA1, fill = Species)) + geom_density(color = "Black", alpha = 0.5) +
+  xlab("Linear Discriminant 1")
+gg2.lda <- ggplot(lda.scores, aes(LDA2, fill = Species)) + geom_density(color = "Black", alpha = 0.5) +
+  xlab("Linear Discriminant 2")
+# We can see visually that the first linear discriminant is able to create a linear combination that well separates
+# the class variable (the three species).
+grid.arrange(gg1.lda, gg2.lda, ncol = 1, nrow = 2, top = "Densities of the Discriminant Scores")
+dev.off()
+
+lda.sp <- ggplot(lda.scores, aes(LDA1, LDA2, color = Species)) + geom_point(size = 3) +
+  geom_vline(xintercept = 0) + geom_hline(yintercept = 0)
+lda.sp
+# Here we can see the scatter plot that plots the species on an x axis (which is LDA1) and y axis (which is LDA2)
+# If you compare this plot to the density plots you can see that they correspond to the separation of the densities the LDA created!!!
+dev.off()    
+print("Classification Table:")
+# So here we see which it predicted right!!!!
+iris.lda.df <- data.table(iris, "pred.Species" = lda.pred$class, "post.prob" = round(lda.pred$posterior, digits = 4))
+attach(iris.lda.df)
+addmargins(table(Species, pred.Species))
+
+
+# Decision Tree!!!!!!!
+iris.tree <- tree(Species~., data = train) #Here we run a default tree where we're trying to predict the Species variable from the train variable.
+summary(iris.tree)
+print("Output of the iris.tree:")
+iris.tree
+plot(iris.tree)
+text(iris.tree, pretty = 0)
+dev.off()
+# Next we create a table to compare the predicted vs actual values
+iris.tree.pred=predict(iris.tree, test, type="class")
+
+table(iris.tree.pred,test.class)
+
+print("Thus we have the error rate as 0.02679 for our decision tree model!")
